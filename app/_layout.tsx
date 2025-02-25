@@ -1,39 +1,71 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { Audio } from "expo-av";
+import { useFonts } from "expo-font";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
-import { useColorScheme } from '@/hooks/useColorScheme';
+import { GameProvider } from "../contexts/GameContext";
+import { unloadAllSounds } from "../utils/sounds";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
+// Keep splash screen visible while loading resources
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+  const [fontsLoaded] = useFonts({
+    BubbleGum: require("../assets/fonts/BubblegumSans-Regular.ttf"),
+    ComicNeue: require("../assets/fonts/ComicNeue-Bold.ttf"),
   });
 
+  // Set up global audio settings
   useEffect(() => {
-    if (loaded) {
+    const setupAudio = async () => {
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+      });
+    };
+
+    setupAudio();
+
+    // Cleanup when the app is closed
+    return () => {
+      unloadAllSounds();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      // Hide splash screen once fonts are loaded
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [fontsLoaded]);
 
-  if (!loaded) {
+  if (!fontsLoaded) {
     return null;
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <GameProvider>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: "slide_from_right",
+            contentStyle: { backgroundColor: "transparent" },
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="free-pop" />
+          <Stack.Screen name="colors" />
+          <Stack.Screen name="abc" />
+          <Stack.Screen name="math" />
+          <Stack.Screen name="speed" />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+        <StatusBar style="light" />
+      </GestureHandlerRootView>
+    </GameProvider>
   );
 }
