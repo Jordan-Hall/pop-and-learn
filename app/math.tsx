@@ -10,7 +10,10 @@ import GameHeader from "../components/GameHeader";
 import PopBubble from "../components/PopBubble";
 import { useGameContext } from "../contexts/GameContext";
 import { COLORS } from "../utils/colors";
-import { loadSound, playSound } from "../utils/sounds";
+import { loadSound } from "../utils/sounds";
+
+import { useSound } from "@/hooks/useSound";
+import { useSpeech } from "@/hooks/useSpeech";
 
 // Grid configuration: 4x4 grid
 const GRID_SIZE = 4;
@@ -37,6 +40,9 @@ type MathProblem = {
 
 export default function MathGame() {
   const { incrementPops, incrementMathProblems } = useGameContext();
+  const { play } = useSound();
+  const { speakText } = useSpeech();
+
   const [difficulty, setDifficulty] = useState(Difficulty.EASY);
   const [currentProblem, setCurrentProblem] = useState<MathProblem | null>(
     null,
@@ -79,7 +85,7 @@ export default function MathGame() {
       const prefix = isGameStart ? "Game started. Target " : "Quick now. Pop ";
       const speech = `${prefix}${problem.num1} ${symbol} ${problem.num2}`;
       isSpeakingRef.current = true;
-      Speech.speak(speech, {
+      speakText(speech, {
         rate: 0.9,
         pitch: 1.0,
         onDone: () => {
@@ -104,7 +110,7 @@ export default function MathGame() {
         ? `That's correct! The answer was ${problem.answer}.`
         : `The answer is ${problem.num1} ${symbol} ${problem.num2} equals ${problem.answer}`;
       isSpeakingRef.current = true;
-      Speech.speak(speech, {
+      speakText(speech, {
         rate: 0.9,
         pitch: 1.0,
         onDone: () => {
@@ -229,7 +235,7 @@ export default function MathGame() {
       });
 
       if (answer === currentProblem.answer) {
-        playSound("correct");
+        play("correct");
         setScore((prev) => prev + 10);
         incrementMathProblems();
         setTimeout(() => {
@@ -243,7 +249,7 @@ export default function MathGame() {
           initializeGame();
         }, 3000);
       } else {
-        playSound("incorrect");
+        play("incorrect");
         setScore((prev) => Math.max(0, prev - 5));
         speakAnswer(currentProblem, false);
         // For a wrong answer, reset only the pressed bubble after a short delay.

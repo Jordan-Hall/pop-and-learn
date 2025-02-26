@@ -14,7 +14,9 @@ import GameHeader from "../components/GameHeader";
 import PopBubble from "../components/PopBubble";
 import { useGameContext } from "../contexts/GameContext";
 import { COLORS } from "../utils/colors";
-import { loadSound, playSound } from "../utils/sounds";
+import { loadSound } from "../utils/sounds";
+
+import { useSound } from "@/hooks/useSound";
 
 // Grid configuration
 const GRID_SIZE = 4; // 4x4 grid
@@ -23,6 +25,8 @@ const GAME_DURATION = 30; // 30 seconds
 
 export default function SpeedGame() {
   const { incrementPops, updateHighScore } = useGameContext();
+  const { play } = useSound();
+
   const [bubbleStates, setBubbleStates] = useState<boolean[]>([]);
   const [bubbleColors, setBubbleColors] = useState<
     [string, string, ...string[]][]
@@ -69,7 +73,7 @@ export default function SpeedGame() {
   const resetBubblesIfAllPopped = useCallback(() => {
     if (poppedCount >= TOTAL_BUBBLES) {
       // Play a special sound for clearing all bubbles
-      playSound("celebration");
+      play("celebration");
 
       // Add bonus points for clearing the grid
       const bonusPoints = 5;
@@ -128,7 +132,7 @@ export default function SpeedGame() {
     }
 
     // Play celebration sound
-    playSound("celebration");
+    play("celebration");
   }, [score, highScore, updateHighScore]);
 
   // Handle bubble pop
@@ -140,7 +144,7 @@ export default function SpeedGame() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       // Play pop sound
-      playSound("pop");
+      play("pop");
 
       // Mark bubble as popped
       setBubbleStates((prev) => {

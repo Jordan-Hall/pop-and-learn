@@ -11,7 +11,10 @@ import GameHeader from "../components/GameHeader";
 import PopBubble from "../components/PopBubble";
 import { useGameContext } from "../contexts/GameContext";
 import { COLORS } from "../utils/colors";
-import { loadSound, playSound } from "../utils/sounds";
+import { loadSound } from "../utils/sounds";
+
+import { useSound } from "@/hooks/useSound";
+import { useSpeech } from "@/hooks/useSpeech";
 
 // Grid configuration
 const GRID_SIZE = 4; // 4x4 grid
@@ -27,6 +30,7 @@ enum GameMode {
 
 export default function AbcGame() {
   const { incrementPops, incrementLettersLearned } = useGameContext();
+  const { speakText } = useSpeech();
   const [mode, setMode] = useState<GameMode>(GameMode.ALPHABET);
   const [currentTarget, setCurrentTarget] = useState("");
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -38,6 +42,8 @@ export default function AbcGame() {
   const [totalTimePlayed, setTotalTimePlayed] = useState(0);
   // State for collapsing/expanding the metrics display
   const [metricsExpanded, setMetricsExpanded] = useState(true);
+
+  const { play } = useSound();
 
   // Helper function to format seconds as MM:SS
   const formatTime = (time: number) => {
@@ -55,9 +61,8 @@ export default function AbcGame() {
   }, []);
 
   // Function to speak text using TTS
-  const speakText = useCallback((text: string) => {
-    Speech.stop();
-    Speech.speak(text, {
+  const speakTextCB = useCallback((text: string) => {
+    speakText(text, {
       language: "en-US",
       pitch: 1.2,
       rate: 0.9,
@@ -102,13 +107,13 @@ export default function AbcGame() {
       // Announce the new target using TTS
       const isFirstTarget = currentIndex === 0 && !newMode;
       if (isFirstTarget) {
-        speakText(`Game started! Find the letter ${target}`);
+        speakTextCB(`Game started! Find the letter ${target}`);
       } else {
         const typeText = gameMode === GameMode.ALPHABET ? "letter" : "number";
-        speakText(`Quick! Find the ${typeText} ${target}`);
+        speakTextCB(`Quick! Find the ${typeText} ${target}`);
       }
     },
-    [mode, currentIndex, speakText],
+    [mode, currentIndex, speakTextCB],
   );
 
   // Initial setup: load sounds and initialize speech
@@ -134,11 +139,11 @@ export default function AbcGame() {
       mode === GameMode.ALPHABET ? GameMode.NUMBERS : GameMode.ALPHABET;
     setMode(newMode);
     setCurrentIndex(0);
-    speakText(
+    speakTextCB(
       `Switching to ${newMode === GameMode.ALPHABET ? "alphabet" : "numbers"} mode`,
     );
     initializeGame(newMode);
-  }, [mode, initializeGame, speakText]);
+  }, [mode, initializeGame, speakTextCB]);
 
   // Handle bubble pop event
   const handlePop = useCallback(
@@ -156,7 +161,7 @@ export default function AbcGame() {
 
       // Check if the popped bubble is the target letter/number
       if (content === currentTarget) {
-        playSound("correct");
+        play("correct");
         incrementPops();
 
         const newPopStates = [...popStates];
@@ -167,11 +172,11 @@ export default function AbcGame() {
         );
 
         if (remainingTargets.length === 0) {
-          playSound("celebration");
+          play("celebration");
           setShowCelebration(true);
           incrementLettersLearned();
           setCompletedCount((prev) => prev + 1);
-          speakText(`Great job! You found all the ${currentTarget}s!`);
+          speakTextCB(`Great job! You found all the ${currentTarget}s!`);
 
           setTimeout(() => {
             setCurrentIndex((prev) => prev + 1);
@@ -180,12 +185,12 @@ export default function AbcGame() {
         } else {
           const remaining = remainingTargets.length;
           if (remaining <= 3) {
-            speakText(`Good! Find ${remaining} more`);
+            speakTextCB(`Good! Find ${remaining} more`);
           }
         }
       } else {
-        playSound("incorrect");
-        speakText(`That's ${content}, not ${currentTarget}. Try again!`);
+        play("incorrect");
+        speakTextCB(`That's ${content}, not ${currentTarget}. Try again!`);
       }
     },
     [
@@ -195,7 +200,7 @@ export default function AbcGame() {
       incrementPops,
       incrementLettersLearned,
       initializeGame,
-      speakText,
+      speakTextCB,
     ],
   );
 

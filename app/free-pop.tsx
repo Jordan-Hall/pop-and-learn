@@ -11,7 +11,10 @@ import GameHeader from "../components/GameHeader";
 import PopBubble from "../components/PopBubble";
 import { useGameContext } from "../contexts/GameContext";
 import { SHAPE_THEMES, COLORS } from "../utils/colors";
-import { loadSound, playSound } from "../utils/sounds";
+import { loadSound } from "../utils/sounds";
+
+import { useSound } from "@/hooks/useSound";
+import { useSpeech } from "@/hooks/useSpeech";
 
 // Grid configuration
 const GRID_SIZE = 5; // 5x5 grid
@@ -62,6 +65,9 @@ const SHAPE_PROGRESSION = [
 
 export default function FreePop() {
   const { incrementPops, incrementShapesCompleted } = useGameContext();
+  const { play } = useSound();
+  const { speakText } = useSpeech();
+
   const [currentTheme, setCurrentTheme] = useState<ShapeTheme>("circle");
   const [currentShapeIndex, setCurrentShapeIndex] = useState(0);
   const [bubbleStates, setBubbleStates] = useState<boolean[]>([]);
@@ -113,7 +119,7 @@ export default function FreePop() {
 
       isSpeakingRef.current = true;
 
-      Speech.speak(message, {
+      speakText(message, {
         rate: 0.9,
         pitch: 1.0,
         onDone: () => {
@@ -140,7 +146,7 @@ export default function FreePop() {
 
     isSpeakingRef.current = true;
 
-    Speech.speak(message, {
+    speakText(message, {
       rate: 0.9,
       pitch: 1.0,
       onDone: () => {
@@ -214,7 +220,7 @@ export default function FreePop() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       // Play pop sound
-      playSound("pop");
+      play("pop");
 
       // Update bubble states
       setBubbleStates((prev) => {
@@ -235,7 +241,7 @@ export default function FreePop() {
         // Show celebration and advance to next shape
         setShowCelebration(true);
         incrementShapesCompleted();
-        playSound("celebration");
+        play("celebration");
 
         // Celebration speech
         const shapeName =
@@ -243,7 +249,7 @@ export default function FreePop() {
             ? "rounded square"
             : currentShape;
 
-        Speech.speak(`Great job! You popped all the ${shapeName} bubbles!`, {
+        speakText(`Great job! You popped all the ${shapeName} bubbles!`, {
           rate: 0.9,
           pitch: 1.0,
         });

@@ -1,6 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useState, useEffect } from "react";
 
+export type AudioSetting = "full" | "noSpeech" | "noSound" | "mute";
+
 type GameContextType = {
   totalPops: number;
   shapesCompleted: number;
@@ -8,12 +10,14 @@ type GameContextType = {
   lettersLearned: number;
   mathProblemsCompleted: number;
   highScore: number;
+  audioSetting: AudioSetting;
   incrementPops: (count?: number) => void;
   incrementShapesCompleted: () => void;
   incrementColorsLearned: () => void;
   incrementLettersLearned: () => void;
   incrementMathProblems: () => void;
   updateHighScore: (score: number) => void;
+  setAudioSetting: (setting: AudioSetting) => void;
 };
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -25,6 +29,7 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
   const [lettersLearned, setLettersLearned] = useState(0);
   const [mathProblemsCompleted, setMathProblemsCompleted] = useState(0);
   const [highScore, setHighScore] = useState(0);
+  const [audioSetting, setAudioSetting] = useState<AudioSetting>("full");
 
   // Load saved data when the app starts
   useEffect(() => {
@@ -39,6 +44,7 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
           setLettersLearned(parsedData.lettersLearned || 0);
           setMathProblemsCompleted(parsedData.mathProblemsCompleted || 0);
           setHighScore(parsedData.highScore || 0);
+          setAudioSetting(parsedData.audioSetting || "full");
         }
       } catch (error) {
         console.error("Failed to load game stats:", error);
@@ -59,6 +65,7 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
           lettersLearned,
           mathProblemsCompleted,
           highScore,
+          audioSetting,
         };
         await AsyncStorage.setItem("gameStats", JSON.stringify(dataToSave));
       } catch (error) {
@@ -74,6 +81,7 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
     lettersLearned,
     mathProblemsCompleted,
     highScore,
+    audioSetting,
   ]);
 
   const incrementPops = (count = 1) => {
@@ -111,12 +119,14 @@ export const GameProvider = ({ children }: { children: React.ReactNode }) => {
         lettersLearned,
         mathProblemsCompleted,
         highScore,
+        audioSetting,
         incrementPops,
         incrementShapesCompleted,
         incrementColorsLearned,
         incrementLettersLearned,
         incrementMathProblems,
         updateHighScore,
+        setAudioSetting,
       }}
     >
       {children}

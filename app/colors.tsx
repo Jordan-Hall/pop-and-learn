@@ -16,7 +16,10 @@ import GameHeader from "../components/GameHeader";
 import PopBubble from "../components/PopBubble";
 import { useGameContext } from "../contexts/GameContext";
 import { LEARNING_COLORS, COLORS } from "../utils/colors";
-import { loadSound, playSound } from "../utils/sounds";
+import { loadSound } from "../utils/sounds";
+
+import { useSound } from "@/hooks/useSound";
+import { useSpeech } from "@/hooks/useSpeech";
 
 // Grid configuration
 const GRID_SIZE = 4; // 4x4 grid
@@ -25,6 +28,9 @@ const GAME_DURATION = 30; // 30 seconds per round
 
 export default function ColorsGame() {
   const { incrementPops, incrementColorsLearned } = useGameContext();
+  const { speakText } = useSpeech();
+
+  const { play } = useSound();
   const [targetColor, setTargetColor] = useState(LEARNING_COLORS[0]);
   const [bubbleColors, setBubbleColors] = useState<
     ((typeof LEARNING_COLORS)[0] & { popped?: boolean })[]
@@ -53,9 +59,8 @@ export default function ColorsGame() {
   }, []);
 
   // Function to speak text using TTS
-  const speakText = useCallback((text: string) => {
-    Speech.stop();
-    Speech.speak(text, {
+  const speakTextCB = useCallback((text: string) => {
+    speakText(text, {
       language: "en-US",
       pitch: 1.2,
       rate: 0.9,
@@ -95,9 +100,9 @@ export default function ColorsGame() {
 
     // Start the round
     setGameActive(true);
-    speakText(`Find the color ${target.name}. You have 30 seconds.`);
+    speakTextCB(`Find the color ${target.name}. You have 30 seconds.`);
     startTimer();
-  }, [speakText, progressWidth]);
+  }, [speakTextCB, progressWidth]);
 
   // Countdown timer for current round
   const startTimer = useCallback(() => {
@@ -107,15 +112,15 @@ export default function ColorsGame() {
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         if (prev === 10) {
-          speakText("10 seconds left!");
+          speakTextCB("10 seconds left!");
         } else if (prev === 5) {
-          speakText("Hurry! 5 seconds left!");
+          speakTextCB("Hurry! 5 seconds left!");
         }
         if (prev <= 1) {
           clearInterval(timerRef.current!);
           setGameActive(false);
           setShowResults(true);
-          speakText(`Time's up! Your score is ${score} points.`);
+          speakTextCB(`Time's up! Your score is ${score} points.`);
           return 0;
         }
         return prev - 1;
@@ -125,7 +130,7 @@ export default function ColorsGame() {
         ((timeRemaining - 1) * 100) / GAME_DURATION,
       );
     }, 1000);
-  }, [timeRemaining, score, speakText, progressWidth]);
+  }, [timeRemaining, score, speakTextCB, progressWidth]);
 
   // Update total time played while a round is active
   useEffect(() => {
@@ -167,30 +172,30 @@ export default function ColorsGame() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
       if (color.name === targetColor.name) {
-        playSound("correct");
+        play("correct");
         setScore((prev) => prev + 10);
         setRemainingBubbles((prev) => prev - 1);
         incrementPops();
 
         if (remainingBubbles <= 1) {
-          playSound("celebration");
+          play("celebration");
           incrementColorsLearned();
           setTotalColorsSolved((prev) => prev + 1);
-          speakText(
+          speakTextCB(
             `Great job! You found all the ${targetColor.name} bubbles!`,
           );
           setTimeout(() => {
             initializeGame();
           }, 1500);
         } else if (remainingBubbles <= 3) {
-          speakText(
+          speakTextCB(
             `Good! ${remainingBubbles - 1} ${targetColor.name} bubbles left.`,
           );
         }
       } else {
-        playSound("incorrect");
+        play("incorrect");
         setScore((prev) => Math.max(0, prev - 5));
-        speakText(`That's ${color.name}, not ${targetColor.name}.`);
+        speakTextCB(`That's ${color.name}, not ${targetColor.name}.`);
       }
 
       // Mark the bubble as popped
@@ -207,7 +212,7 @@ export default function ColorsGame() {
       incrementPops,
       incrementColorsLearned,
       initializeGame,
-      speakText,
+      speakTextCB,
     ],
   );
 
@@ -321,7 +326,7 @@ export default function ColorsGame() {
             <Pressable
               style={styles.playAgainButton}
               onPress={() => {
-                speakText("Let's play again!");
+                speakTextCB("Let's play again!");
                 initializeGame();
               }}
             >

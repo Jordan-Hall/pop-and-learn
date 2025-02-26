@@ -5,6 +5,8 @@ import { ArrowLeft } from "lucide-react-native";
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 
+import AudioSettingDropdown from "../components/AudioSettingDropdown";
+
 type GameHeaderProps = {
   title: string;
   subtitle?: string;
@@ -42,6 +44,9 @@ const GameHeader = ({
       <View style={styles.titleContainer}>
         <Text style={styles.title}>{title}</Text>
         {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+      </View>
+      <View style={styles.dropdownContainer}>
+        <AudioSettingDropdown />
       </View>
     </LinearGradient>
   );
@@ -88,6 +93,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "white",
     opacity: 0.9,
+  },
+  dropdownContainer: {
+    marginLeft: "auto",
   },
 });
 

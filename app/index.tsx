@@ -1,19 +1,15 @@
+// screens/MainMenu.tsx
 import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import {
-  // Brain,
-  Palette,
-  WholeWord,
-  Calculator,
-  Zap,
-} from "lucide-react-native";
+import { Palette, WholeWord, Calculator, Zap } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
 
 import AnimatedBackground from "../components/AnimatedBackground";
+import AudioSettingDropdown from "../components/AudioSettingDropdown";
 import FloatingAnimal from "../components/FloatingAnimal";
 import { useGameContext } from "../contexts/GameContext";
 
@@ -59,7 +55,7 @@ const GAME_MODES = [
 export default function MainMenu() {
   const router = useRouter();
   const [sound, setSound] = React.useState<Audio.Sound | null>(null);
-  const { totalPops } = useGameContext();
+  const { totalPops, audioSetting } = useGameContext();
 
   // Load button press sound
   useEffect(() => {
@@ -85,12 +81,19 @@ export default function MainMenu() {
     route: "/free-pop" | "/colors" | "/abc" | "/math" | "/speed",
   ) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    sound?.replayAsync();
+    if (audioSetting !== "noSound" && audioSetting !== "mute") {
+      sound?.replayAsync();
+    }
     router.push(route);
   };
 
   return (
     <AnimatedBackground>
+      {/* Audio Setting Dropdown positioned top right */}
+      <View style={styles.dropdownContainer}>
+        <AudioSettingDropdown />
+      </View>
+
       {/* Floating animals */}
       <FloatingAnimal
         type="bunny"
@@ -178,10 +181,6 @@ export default function MainMenu() {
               <Text style={styles.statValue}>{totalPops}</Text>
               <Text style={styles.statLabel}>Total Pops</Text>
             </View>
-            {/* <View style={styles.statItem}>
-              <Text style={styles.statValue}>{shapesCompleted}</Text>
-              <Text style={styles.statLabel}>Shapes Done</Text>
-            </View> */}
           </View>
         </LinearGradient>
       </Animated.View>
@@ -190,6 +189,12 @@ export default function MainMenu() {
 }
 
 const styles = StyleSheet.create({
+  dropdownContainer: {
+    position: "absolute",
+    top: 50,
+    right: 20,
+    zIndex: 999,
+  },
   titleContainer: {
     alignItems: "center",
     marginTop: 60,

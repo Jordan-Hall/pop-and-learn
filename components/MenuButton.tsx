@@ -6,7 +6,8 @@ import { Text, StyleSheet, Pressable, View } from "react-native";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
 import FloatingAnimal from "./FloatingAnimal";
-import { playSound } from "../utils/sounds";
+
+import { useSound } from "@/hooks/useSound";
 
 type MenuButtonProps = {
   title: string;
@@ -26,11 +27,12 @@ const MenuButton = ({
   animal,
 }: MenuButtonProps) => {
   const router = useRouter();
+  const { play } = useSound();
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    playSound("buttonPress");
-    router.push(route);
+    play("buttonPress");
+    router.push(route as any);
   };
 
   return (

@@ -40,7 +40,7 @@ const PopBubble = ({
   sound,
   shapeStyle,
 }: PopBubbleProps) => {
-  const { incrementPops } = useGameContext();
+  const { incrementPops, audioSetting } = useGameContext();
 
   // Animation values
   const scale = useSharedValue(isPopped ? 0.85 : 1);
@@ -69,7 +69,9 @@ const PopBubble = ({
   const playSound = async () => {
     try {
       if (sound) {
-        await sound.replayAsync();
+        if (audioSetting !== "noSound" && audioSetting !== "mute") {
+          await sound.replayAsync();
+        }
       }
     } catch (error) {
       console.log("Error playing sound:", error);
