@@ -1,11 +1,11 @@
 {
   "expo": {
     "name": "PopAndLearn",
-    "slug": "PopAndLearn",
+    "slug": "pop-and-learn",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "icon": "./assets/images/pop-and-learn-app-icon.png",
+    "scheme": "popandlearn",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -13,21 +13,22 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/pop-and-learn-transparent-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.JordanHallDev.PopAndLearn"
     },
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/pop-and-learn-distinctive-icon.svg"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/pop-and-learn-logo.svg",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
@@ -36,6 +37,15 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "d94bb56f-39db-416a-94d6-26f10ca94fb2"
+      }
+    },
+    "owner": "jordanhall_dev"
   }
 }

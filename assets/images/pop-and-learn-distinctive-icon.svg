@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFD1DC;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FF6B95;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#00000044"/>
+    </filter>
+  </defs>
+  
+  <!-- Rounded square background -->
+  <rect x="8" y="8" width="176" height="176" rx="30" ry="30" fill="url(#bg-gradient)"/>
+  
+  <!-- Large bubble representing "Pop" -->
+  <circle cx="96" cy="70" r="40" fill="white" filter="url(#shadow)"/>
+  
+  <!-- "P&L" text inside bubble -->
+  <text x="96" y="80" 
+        font-family="Arial, sans-serif" 
+        font-size="38" 
+        font-weight="bold"
+        text-anchor="middle"
+        fill="#FF6B95">
+    P&amp;L
+  </text>
+  
+  <!-- Smaller bubbles -->
+  <circle cx="58" cy="128" r="20" fill="white" filter="url(#shadow)"/>
+  <circle cx="96" cy="140" r="16" fill="white" filter="url(#shadow)"/>
+  <circle cx="134" cy="128" r="20" fill="white" filter="url(#shadow)"/>
+  
+  <!-- Small decorative bubbles -->
+  <circle cx="46" cy="50" r="8" fill="white" opacity="0.8"/>
+  <circle cx="146" cy="50" r="6" fill="white" opacity="0.8"/>
+  <circle cx="30" cy="90" r="5" fill="white" opacity="0.6"/>
+  <circle cx="162" cy="90" r="5" fill="white" opacity="0.6"/>
+</svg>
