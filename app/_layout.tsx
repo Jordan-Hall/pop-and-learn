@@ -62,6 +62,7 @@ export default function RootLayout() {
           <Stack.Screen name="abc" />
           <Stack.Screen name="math" />
           <Stack.Screen name="speed" />
+          <Stack.Screen name="balloon" />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="light" />

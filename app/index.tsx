@@ -3,7 +3,13 @@ import { Audio } from "expo-av";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Palette, WholeWord, Calculator, Zap } from "lucide-react-native";
+import {
+  Palette,
+  WholeWord,
+  Calculator,
+  Zap,
+  PopcornIcon,
+} from "lucide-react-native";
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import Animated, { FadeInDown, FadeIn } from "react-native-reanimated";
@@ -50,6 +56,13 @@ const GAME_MODES = [
     route: "/speed" as const,
     animal: "lion" as const,
   },
+  {
+    title: "Balloon Shapes",
+    icon: PopcornIcon,
+    color: "#FF6B95",
+    route: "/balloon" as const,
+    animal: "bunny" as const,
+  },
 ];
 
 export default function MainMenu() {
@@ -78,7 +91,7 @@ export default function MainMenu() {
   }, []);
 
   const handleGameSelect = (
-    route: "/free-pop" | "/colors" | "/abc" | "/math" | "/speed",
+    route: "/free-pop" | "/colors" | "/abc" | "/math" | "/speed" | "/balloon",
   ) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (audioSetting !== "noSound" && audioSetting !== "mute") {
