@@ -21,14 +21,14 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/pop-and-learn-distinctive-icon.svg"
+      "favicon": "./assets/images/pop-and-learn-app-icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/pop-and-learn-logo.svg",
+          "image": "./assets/images/pop-and-learn-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
