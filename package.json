@@ -17,6 +17,17 @@
   "eslintConfig": {
     "extends": "universe/native"
   },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "lucide-react-native",
+          "@lucide/lab"
+        ],
+        "listUnknownPackages": false
+      }
+    }
+  },
   "dependencies": {
     "@expo/vector-icons": "^14.0.4",
     "@lucide/lab": "^0.1.2",
