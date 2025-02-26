@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import { View, Text, StyleSheet, Pressable, AppState } from "react-native";
 
 import AnimatedBackground from "../components/AnimatedBackground";
 import FloatingAnimal from "../components/FloatingAnimal";
@@ -10,10 +10,10 @@ import GameHeader from "../components/GameHeader";
 import PopBubble from "../components/PopBubble";
 import { useGameContext } from "../contexts/GameContext";
 import { COLORS } from "../utils/colors";
-import { loadSound } from "../utils/sounds";
 
 import { useSound } from "@/hooks/useSound";
 import { useSpeech } from "@/hooks/useSpeech";
+import { loadSound } from "@/utils/sounds";
 
 // Grid configuration: 4x4 grid
 const GRID_SIZE = 4;
@@ -49,41 +49,90 @@ export default function MathGame() {
   );
   const [bubbleAnswers, setBubbleAnswers] = useState<number[]>([]);
   const [score, setScore] = useState(0);
-  const [showResult, setShowResult] = useState(false);
-  const [isCorrect, setIsCorrect] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
   // --- Elapsed time state ---
   const [elapsedTime, setElapsedTime] = useState(0);
   const startTime = useRef(Date.now());
-  useEffect(() => {
-    const timerInterval = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - startTime.current) / 1000));
-    }, 1000);
-    return () => clearInterval(timerInterval);
-  }, []);
-  // --- End elapsed time state ---
 
   // Collapsible metrics display state
   const [metricsExpanded, setMetricsExpanded] = useState(true);
 
-  // --- NEW: Pop state array for the bubbles ---
+  // --- Pop state array for the bubbles ---
   const [popStates, setPopStates] = useState<boolean[]>(
     new Array(TOTAL_BUBBLES).fill(false),
   );
 
   // Refs for timers and speech
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const nextProblemTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const timeIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isSpeakingRef = useRef<boolean>(false);
+  const appState = useRef(AppState.currentState);
+  const isComponentMounted = useRef(true);
 
-  // Function to speak the math problem.
+  // App state monitoring
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (
+        appState.current === "active" &&
+        nextAppState.match(/inactive|background/)
+      ) {
+        cleanUp();
+      } else if (
+        appState.current.match(/inactive|background/) &&
+        nextAppState === "active"
+      ) {
+        if (isComponentMounted.current) {
+          // Adjust startTime based on elapsedTime when resuming
+          startTime.current = Date.now() - elapsedTime * 1000;
+          initializeGame();
+        }
+      }
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [elapsedTime]);
+
+  // Elapsed time tracking
+  useEffect(() => {
+    timeIntervalRef.current = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime.current) / 1000));
+    }, 1000);
+
+    return () => {
+      if (timeIntervalRef.current) {
+        clearInterval(timeIntervalRef.current);
+        timeIntervalRef.current = null;
+      }
+    };
+  }, []);
+
+  // Component lifecycle
+  useEffect(() => {
+    isComponentMounted.current = true;
+
+    return () => {
+      isComponentMounted.current = false;
+      cleanUp();
+    };
+  }, []);
+
+  // Function to speak the math problem
   const speakMathProblem = useCallback(
     async (problem: MathProblem, isGameStart = false) => {
+      if (!isComponentMounted.current) return;
+
       if (isSpeakingRef.current) {
         await Speech.stop();
       }
+
       const symbol = problem.type === ProblemType.ADDITION ? "plus" : "minus";
       const prefix = isGameStart ? "Game started. Target " : "Quick now. Pop ";
       const speech = `${prefix}${problem.num1} ${symbol} ${problem.num2}`;
+
       isSpeakingRef.current = true;
       speakText(speech, {
         rate: 0.9,
@@ -96,138 +145,220 @@ export default function MathGame() {
         },
       });
     },
-    [],
+    [speakText],
   );
 
-  // Function to speak the answer.
-  const speakAnswer = useCallback(
-    async (problem: MathProblem, wasCorrect = false) => {
+  // Function to speak only when correct answer is found.
+  // Now accepts an optional onComplete callback to run after speech finishes.
+  const speakCorrectAnswer = useCallback(
+    async (problem: MathProblem, onComplete?: () => void) => {
+      if (!isComponentMounted.current) return;
+
       if (isSpeakingRef.current) {
         await Speech.stop();
       }
-      const symbol = problem.type === ProblemType.ADDITION ? "plus" : "minus";
-      const speech = wasCorrect
-        ? `That's correct! The answer was ${problem.answer}.`
-        : `The answer is ${problem.num1} ${symbol} ${problem.num2} equals ${problem.answer}`;
+
+      const speech = `That's correct! The answer was ${problem.answer}.`;
+
       isSpeakingRef.current = true;
       speakText(speech, {
         rate: 0.9,
         pitch: 1.0,
         onDone: () => {
           isSpeakingRef.current = false;
+          if (onComplete) {
+            onComplete();
+          }
         },
         onStopped: () => {
           isSpeakingRef.current = false;
         },
       });
     },
-    [],
+    [speakText],
   );
 
-  // Generate a new math problem.
+  // Function to speak hint for wrong answers
+  const speakHint = useCallback(() => {
+    if (!isComponentMounted.current || !currentProblem) return;
+
+    const hint = "Try again!";
+
+    speakText(hint, {
+      rate: 0.9,
+      pitch: 1.0,
+    });
+  }, [speakText, currentProblem]);
+
+  // Generate a new math problem
   const generateProblem = useCallback(() => {
-    const maxNum = difficulty === Difficulty.EASY ? 5 : 10;
-    const problemType =
-      Math.random() > 0.5 ? ProblemType.ADDITION : ProblemType.SUBTRACTION;
-    let num1: number, num2: number, answer: number;
-    if (problemType === ProblemType.ADDITION) {
-      num1 = Math.floor(Math.random() * maxNum) + 1;
-      num2 = Math.floor(Math.random() * maxNum) + 1;
-      answer = num1 + num2;
-    } else {
-      num1 = Math.floor(Math.random() * maxNum) + 1;
-      num2 = Math.floor(Math.random() * num1) + 1;
-      answer = num1 - num2;
+    if (!isComponentMounted.current) return null;
+
+    try {
+      const maxNum = difficulty === Difficulty.EASY ? 5 : 10;
+      const problemType =
+        Math.random() > 0.5 ? ProblemType.ADDITION : ProblemType.SUBTRACTION;
+
+      let num1, num2, answer;
+
+      if (problemType === ProblemType.ADDITION) {
+        num1 = Math.floor(Math.random() * maxNum) + 1;
+        num2 = Math.floor(Math.random() * maxNum) + 1;
+        answer = num1 + num2;
+      } else {
+        num1 = Math.floor(Math.random() * maxNum) + 1;
+        num2 = Math.floor(Math.random() * num1) + 1;
+        answer = num1 - num2;
+      }
+
+      const problem = { num1, num2, type: problemType, answer };
+      setCurrentProblem(problem);
+      return problem;
+    } catch (error) {
+      console.error("Error generating problem:", error);
+      return null;
     }
-    const problem: MathProblem = { num1, num2, type: problemType, answer };
-    setCurrentProblem(problem);
-    return problem;
   }, [difficulty]);
 
-  // Generate bubble answers: correct answer plus distractors.
+  // Generate bubble answers
   const generateBubbleAnswers = useCallback(
     (problem: MathProblem) => {
-      const answers = [problem.answer];
-      const maxNum = difficulty === Difficulty.EASY ? 10 : 20;
-      // Generate unique distractor answers.
-      while (answers.length < TOTAL_BUBBLES) {
-        const distractor = Math.floor(Math.random() * maxNum) + 1;
-        if (!answers.includes(distractor)) {
-          answers.push(distractor);
+      if (!problem || !isComponentMounted.current) return;
+
+      try {
+        const answers = [problem.answer];
+        const maxNum = difficulty === Difficulty.EASY ? 10 : 20;
+
+        // Use a Set to ensure unique values
+        const answerSet = new Set(answers);
+
+        // Avoid infinite loop with a safety counter
+        let safetyCounter = 0;
+        const maxAttempts = 100;
+
+        while (answerSet.size < TOTAL_BUBBLES && safetyCounter < maxAttempts) {
+          const distractor = Math.floor(Math.random() * maxNum) + 1;
+          answerSet.add(distractor);
+          safetyCounter++;
         }
+
+        // Convert Set back to array and shuffle
+        const shuffled = Array.from(answerSet)
+          .slice(0, TOTAL_BUBBLES)
+          .sort(() => Math.random() - 0.5);
+
+        setBubbleAnswers(shuffled);
+      } catch (error) {
+        console.error("Error generating bubble answers:", error);
+        setBubbleAnswers(Array(TOTAL_BUBBLES).fill(0));
       }
-      const shuffled = answers.sort(() => Math.random() - 0.5);
-      setBubbleAnswers(shuffled);
     },
     [difficulty],
   );
 
-  // Clean up timers and speech.
+  // Clean up timers and speech
   const cleanUp = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (nextProblemTimerRef.current) {
-      clearTimeout(nextProblemTimerRef.current);
-      nextProblemTimerRef.current = null;
+
+    try {
+      Speech.stop();
+    } catch (error) {
+      console.error("Error stopping speech during cleanup:", error);
     }
-    Speech.stop();
+
     isSpeakingRef.current = false;
   }, []);
 
-  // Initialize the game: generate problem, answers, reset popStates.
+  // Format problem text for display
+  const getProblemText = useCallback(() => {
+    if (!currentProblem) return "";
+    const symbol = currentProblem.type === ProblemType.ADDITION ? "+" : "-";
+    return `${currentProblem.num1} ${symbol} ${currentProblem.num2} = ?`;
+  }, [currentProblem]);
+
+  // Initialize the game
   const initializeGame = useCallback(() => {
+    if (!isComponentMounted.current) return;
+
     cleanUp();
-    // Reset popStates for the new problem.
     setPopStates(new Array(TOTAL_BUBBLES).fill(false));
-    const problem = generateProblem();
-    generateBubbleAnswers(problem);
-    setShowResult(false);
-    const isFirstProblem = score === 0;
-    setTimeout(() => {
-      speakMathProblem(problem, isFirstProblem);
-    }, 300);
-    // After 20 seconds, speak the answer if no correct selection is made.
-    timerRef.current = setTimeout(() => {
-      if (!showResult) {
-        speakAnswer(problem);
+
+    try {
+      const problem = generateProblem();
+      if (problem) {
+        generateBubbleAnswers(problem);
+
+        setTimeout(() => {
+          if (isComponentMounted.current) {
+            const isFirstProblem = score === 0;
+            speakMathProblem(problem, isFirstProblem);
+
+            // Set a timeout to provide a hint if no correct selection is made
+            timerRef.current = setTimeout(() => {
+              if (isComponentMounted.current) {
+                speakText(
+                  "Remember, we're trying to solve " + getProblemText(),
+                );
+              }
+            }, 20000);
+          }
+        }, 300);
       }
-    }, 20000);
+    } catch (error) {
+      console.error("Error initializing game:", error);
+    }
   }, [
     cleanUp,
     generateProblem,
     generateBubbleAnswers,
     score,
-    showResult,
     speakMathProblem,
-    speakAnswer,
+    speakText,
+    getProblemText,
   ]);
 
-  // Initial mount: load sounds and initialize game.
   useEffect(() => {
-    loadSound("pop");
-    loadSound("correct");
-    loadSound("incorrect");
-    initializeGame();
+    const loadResources = async () => {
+      try {
+        await Promise.all([
+          loadSound("pop"),
+          loadSound("correct"),
+          loadSound("incorrect"),
+        ]);
+        setIsLoading(false);
+        // Use setTimeout to ensure state is fully updated before initializing
+        setTimeout(() => {
+          if (isComponentMounted.current) {
+            initializeGame();
+          }
+        }, 100);
+      } catch (error) {
+        console.error("Error loading resources:", error);
+        setIsLoading(false);
+      }
+    };
+
+    loadResources();
+
     return () => {
       cleanUp();
     };
-  }, [initializeGame, cleanUp]);
+  }, []);
 
-  // Handle answer selection.
-  // For a wrong answer, we briefly mark a bubble as pressed and then reset that
-  // bubble's state. For the correct answer, we show a result overlay, reset all bubbles,
-  // and load a new problem.
+  // Handle answer selection
   const handleAnswerSelect = useCallback(
     (index: number, answer: number) => {
-      if (!currentProblem || showResult) return;
-      // If this bubble is already pressed, do nothing.
+      if (!currentProblem || !isComponentMounted.current) return;
+
+      // If this bubble is already pressed, do nothing
       if (popStates[index]) return;
 
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 
-      // Mark the tapped bubble as pressed.
+      // Mark the tapped bubble as pressed
       setPopStates((prev) => {
         const newStates = [...prev];
         newStates[index] = true;
@@ -235,62 +366,61 @@ export default function MathGame() {
       });
 
       if (answer === currentProblem.answer) {
+        // Correct answer: update score and increment counters
         play("correct");
         setScore((prev) => prev + 10);
         incrementMathProblems();
-        setTimeout(() => {
-          speakAnswer(currentProblem, true);
-        }, 500);
-        setIsCorrect(true);
-        setShowResult(true);
-        nextProblemTimerRef.current = setTimeout(() => {
-          // Reset all bubbles state before starting the next round.
-          setPopStates(new Array(TOTAL_BUBBLES).fill(false));
-          initializeGame();
-        }, 3000);
+
+        // Speak correct feedback and only move on when speech finishes
+        speakCorrectAnswer(currentProblem, () => {
+          if (isComponentMounted.current) {
+            initializeGame();
+          }
+        });
       } else {
+        // Wrong answer: play incorrect sound and give a hint
         play("incorrect");
         setScore((prev) => Math.max(0, prev - 5));
-        speakAnswer(currentProblem, false);
-        // For a wrong answer, reset only the pressed bubble after a short delay.
-        setTimeout(() => {
-          setPopStates((prev) => {
-            const newStates = [...prev];
-            newStates[index] = false;
-            return newStates;
-          });
-        }, 300);
+        speakHint();
       }
+
       incrementPops();
     },
     [
       currentProblem,
-      showResult,
       popStates,
+      play,
       incrementPops,
       incrementMathProblems,
+      speakCorrectAnswer,
       initializeGame,
-      speakAnswer,
+      speakHint,
     ],
   );
 
-  // Toggle difficulty (reset round with new difficulty).
+  // Toggle difficulty
   const toggleDifficulty = useCallback(() => {
     const newDifficulty =
       difficulty === Difficulty.EASY ? Difficulty.HARD : Difficulty.EASY;
     setDifficulty(newDifficulty);
     cleanUp();
+
     setTimeout(() => {
-      initializeGame();
+      if (isComponentMounted.current) {
+        initializeGame();
+      }
     }, 100);
   }, [difficulty, initializeGame, cleanUp]);
 
-  // Format problem text for display.
-  const getProblemText = useCallback(() => {
-    if (!currentProblem) return "";
-    const symbol = currentProblem.type === ProblemType.ADDITION ? "+" : "-";
-    return `${currentProblem.num1} ${symbol} ${currentProblem.num2} = ?`;
-  }, [currentProblem]);
+  if (isLoading) {
+    return (
+      <AnimatedBackground colors={COLORS.math.background}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </AnimatedBackground>
+    );
+  }
 
   return (
     <AnimatedBackground colors={COLORS.math.background}>
@@ -361,18 +491,6 @@ export default function MathGame() {
             </View>
           </View>
         )}
-
-        {/* Correct answer overlay (static, no flashing) */}
-        {showResult && isCorrect && (
-          <View
-            style={[
-              styles.resultOverlay,
-              { backgroundColor: "rgba(144, 238, 144, 0.8)" },
-            ]}
-          >
-            <Text style={styles.resultText}>Correct!</Text>
-          </View>
-        )}
       </View>
     </AnimatedBackground>
   );
@@ -383,6 +501,16 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     paddingVertical: 20,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontFamily: "ComicNeue",
+    fontSize: 24,
+    color: COLORS.text.primary,
   },
   problemContainer: {
     flexDirection: "row",
@@ -435,6 +563,7 @@ const styles = StyleSheet.create({
   },
   metricsToggle: {
     marginVertical: 10,
+    padding: 8,
   },
   metricsToggleText: {
     fontFamily: "ComicNeue",
@@ -464,19 +593,5 @@ const styles = StyleSheet.create({
     fontFamily: "BubbleGum",
     fontSize: 24,
     color: COLORS.math.primary,
-  },
-  resultOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 10,
-  },
-  resultText: {
-    fontFamily: "BubbleGum",
-    fontSize: 48,
-    color: "white",
-    textShadowColor: "rgba(0, 0, 0, 0.2)",
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 3,
   },
 });
