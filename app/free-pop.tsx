@@ -1,7 +1,7 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Speech from "expo-speech"; // Add this import
-import React, { useState, useEffect, useCallback, useRef } from "react"; // Add useRef
+import * as Speech from "expo-speech";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
@@ -19,19 +19,51 @@ const TOTAL_BUBBLES = GRID_SIZE * GRID_SIZE;
 
 type ShapeTheme = keyof typeof SHAPE_THEMES;
 
-// Define shape styles for each theme
-const SHAPE_STYLES: Record<ShapeTheme, { borderRadius: number }> = {
-  circle: { borderRadius: 50 }, // Full circle (default)
-  square: { borderRadius: 5 }, // Almost square with slightly rounded corners
-  star: { borderRadius: 15 }, // We'll use a rounded shape as approximation
-  heart: { borderRadius: 20 }, // Rounded shape as approximation,
-  hexagon: { borderRadius: 10 }, // Rounded shape as approximation,
-  animal: { borderRadius: 20 }, // Rounded shape as approximation,
+// Define realistic shapes we can actually create
+const SHAPES = {
+  CIRCLE: "circle",
+  SQUARE: "square",
+  ROUNDED_SQUARE: "roundedSquare",
+  PILL: "pill",
 };
+
+// Define shape styles with appropriate properties for each shape
+const SHAPE_STYLES = {
+  [SHAPES.CIRCLE]: {
+    borderRadius: 50,
+    aspectRatio: 1,
+    transform: [],
+  },
+  [SHAPES.SQUARE]: {
+    borderRadius: 5,
+    aspectRatio: 1,
+    transform: [],
+  },
+  [SHAPES.ROUNDED_SQUARE]: {
+    borderRadius: 15,
+    aspectRatio: 1,
+    transform: [],
+  },
+  [SHAPES.PILL]: {
+    borderRadius: 50,
+    width: 80,
+    height: 60,
+    transform: [],
+  },
+};
+
+// Define progression of shapes for the game
+const SHAPE_PROGRESSION = [
+  SHAPES.CIRCLE,
+  SHAPES.SQUARE,
+  SHAPES.ROUNDED_SQUARE,
+  SHAPES.PILL,
+];
 
 export default function FreePop() {
   const { incrementPops, incrementShapesCompleted } = useGameContext();
   const [currentTheme, setCurrentTheme] = useState<ShapeTheme>("circle");
+  const [currentShapeIndex, setCurrentShapeIndex] = useState(0);
   const [bubbleStates, setBubbleStates] = useState<boolean[]>([]);
   const [poppedCount, setPoppedCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
@@ -39,61 +71,86 @@ export default function FreePop() {
   const hintTimerRef = useRef<NodeJS.Timeout | null>(null);
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastPopTimeRef = useRef<number>(Date.now());
+  const isSpeakingRef = useRef<boolean>(false);
 
-  // Speak the current theme
-  const announceCurrentTheme = useCallback(
-    (isFirstTime = false) => {
+  // Get current shape from progression
+  const currentShape = SHAPE_PROGRESSION[currentShapeIndex];
+
+  // Clean up function for timers and speech
+  const cleanUp = useCallback(() => {
+    // Stop any ongoing speech
+    if (isSpeakingRef.current) {
+      Speech.stop();
+      isSpeakingRef.current = false;
+    }
+
+    // Clear timers
+    if (hintTimerRef.current) {
+      clearTimeout(hintTimerRef.current);
+      hintTimerRef.current = null;
+    }
+
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = null;
+    }
+  }, []);
+
+  // Speak the current shape
+  const announceCurrentShape = useCallback(
+    async (isFirstTime = false) => {
+      if (isSpeakingRef.current) {
+        await Speech.stop();
+      }
+
+      const shapeName =
+        currentShape === SHAPES.ROUNDED_SQUARE
+          ? "rounded square"
+          : currentShape;
+
       const prefix = isFirstTime ? "Game started. " : "New shape! ";
-      const message = `${prefix}Pop all the ${SHAPE_THEMES[currentTheme].name} bubbles!`;
+      const message = `${prefix}Pop all the ${shapeName} bubbles!`;
+
+      isSpeakingRef.current = true;
 
       Speech.speak(message, {
         rate: 0.9,
         pitch: 1.0,
+        onDone: () => {
+          isSpeakingRef.current = false;
+        },
+        onStopped: () => {
+          isSpeakingRef.current = false;
+        },
       });
     },
-    [currentTheme],
+    [currentShape],
   );
 
   // Give a hint if user is inactive
-  const giveHint = useCallback(() => {
+  const giveHint = useCallback(async () => {
+    if (isSpeakingRef.current) {
+      await Speech.stop();
+    }
+
     const remainingCount = TOTAL_BUBBLES - poppedCount;
-    const message = `Keep going! ${remainingCount} ${SHAPE_THEMES[currentTheme].name} bubbles left to pop.`;
+    const shapeName =
+      currentShape === SHAPES.ROUNDED_SQUARE ? "rounded square" : currentShape;
+    const message = `Keep going! ${remainingCount} ${shapeName} bubbles left to pop.`;
+
+    isSpeakingRef.current = true;
 
     Speech.speak(message, {
       rate: 0.9,
       pitch: 1.0,
+      onDone: () => {
+        isSpeakingRef.current = false;
+      },
+      onStopped: () => {
+        isSpeakingRef.current = false;
+      },
     });
-  }, [currentTheme, poppedCount]);
-
-  // Initialize bubble states
-  useEffect(() => {
-    setBubbleStates(Array(TOTAL_BUBBLES).fill(false));
-    setPoppedCount(0);
-
-    // Announce the new theme
-    Speech.stop();
-    announceCurrentTheme(completedCount === 0);
-
-    // Set up inactivity timer
-    resetInactivityTimer();
-
-    // Set a hint timer for halfway through
-    if (hintTimerRef.current) {
-      clearTimeout(hintTimerRef.current);
-    }
-
-    hintTimerRef.current = setTimeout(() => {
-      if (poppedCount < TOTAL_BUBBLES / 2) {
-        giveHint();
-      }
-    }, 15000); // Give a hint after 15 seconds if less than half completed
-  }, [
-    currentTheme,
-    announceCurrentTheme,
-    giveHint,
-    completedCount,
-    poppedCount,
-  ]);
+  }, [currentShape, poppedCount]);
 
   // Reset inactivity timer
   const resetInactivityTimer = useCallback(() => {
@@ -103,35 +160,45 @@ export default function FreePop() {
 
     inactivityTimerRef.current = setTimeout(() => {
       const now = Date.now();
-      // If no bubble was popped in the last 10 seconds and game is not complete
-      if (now - lastPopTimeRef.current > 10000 && poppedCount < TOTAL_BUBBLES) {
+      // If no bubble was popped in the last 20 seconds and game is not complete
+      if (now - lastPopTimeRef.current > 20000 && poppedCount < TOTAL_BUBBLES) {
         giveHint();
-        // Reset the timer again
-        resetInactivityTimer();
       }
-    }, 10000); // Check for inactivity every 10 seconds
+    }, 20000);
   }, [giveHint, poppedCount]);
 
-  // Load pop sound
+  // Initialize bubble states only when the current shape changes.
+  // Notice that we removed `giveHint` and `completedCount` from the dependencies
+  // to prevent resetting the game when a bubble is popped.
+  useEffect(() => {
+    setBubbleStates(Array(TOTAL_BUBBLES).fill(false));
+    setPoppedCount(0);
+
+    // Announce the new shape
+    cleanUp();
+    setTimeout(() => {
+      announceCurrentShape(completedCount === 0);
+    }, 300);
+
+    // Set up inactivity timer
+    resetInactivityTimer();
+
+    // Set a hint timer for halfway through
+    hintTimerRef.current = setTimeout(() => {
+      if (poppedCount < TOTAL_BUBBLES / 2) {
+        giveHint();
+      }
+    }, 30000);
+  }, [currentShape, cleanUp, resetInactivityTimer, announceCurrentShape]);
+
+  // Load pop and celebration sounds
   useEffect(() => {
     loadSound("pop");
     loadSound("celebration");
 
-    // Cleanup function
-    return () => {
-      // Stop any ongoing speech
-      Speech.stop();
-
-      // Clear timers
-      if (hintTimerRef.current) {
-        clearTimeout(hintTimerRef.current);
-      }
-
-      if (inactivityTimerRef.current) {
-        clearTimeout(inactivityTimerRef.current);
-      }
-    };
-  }, []);
+    // Cleanup function when component unmounts
+    return cleanUp;
+  }, [cleanUp]);
 
   const handlePop = useCallback(
     (index: number) => {
@@ -162,19 +229,8 @@ export default function FreePop() {
 
       // Check if all bubbles are popped
       if (poppedCount + 1 >= TOTAL_BUBBLES) {
-        // Stop any ongoing speech
-        Speech.stop();
-
-        // Clear timers
-        if (hintTimerRef.current) {
-          clearTimeout(hintTimerRef.current);
-          hintTimerRef.current = null;
-        }
-
-        if (inactivityTimerRef.current) {
-          clearTimeout(inactivityTimerRef.current);
-          inactivityTimerRef.current = null;
-        }
+        // Clean up timers and speech
+        cleanUp();
 
         // Show celebration and advance to next shape
         setShowCelebration(true);
@@ -182,39 +238,67 @@ export default function FreePop() {
         playSound("celebration");
 
         // Celebration speech
-        Speech.speak(
-          `Great job! You popped all the ${SHAPE_THEMES[currentTheme].name} bubbles!`,
-          {
-            rate: 0.9,
-            pitch: 1.0,
-          },
-        );
+        const shapeName =
+          currentShape === SHAPES.ROUNDED_SQUARE
+            ? "rounded square"
+            : currentShape;
+
+        Speech.speak(`Great job! You popped all the ${shapeName} bubbles!`, {
+          rate: 0.9,
+          pitch: 1.0,
+        });
 
         // Reset and move to next shape after a delay
         setTimeout(() => {
-          const themes = Object.keys(SHAPE_THEMES) as ShapeTheme[];
-          const nextThemeIndex =
-            (themes.indexOf(currentTheme) + 1) % themes.length;
-          setCurrentTheme(themes[nextThemeIndex]);
+          // Move to the next shape in the progression
+          const nextShapeIndex =
+            (currentShapeIndex + 1) % SHAPE_PROGRESSION.length;
+          setCurrentShapeIndex(nextShapeIndex);
+
+          // Update the theme color
+          setCurrentTheme(
+            Object.keys(SHAPE_THEMES)[
+              nextShapeIndex % Object.keys(SHAPE_THEMES).length
+            ] as ShapeTheme,
+          );
+
           setCompletedCount((prev) => prev + 1);
           setShowCelebration(false);
-        }, 2000);
+        }, 2500);
       }
     },
     [
       bubbleStates,
       poppedCount,
-      currentTheme,
+      currentShape,
+      currentShapeIndex,
       incrementPops,
       incrementShapesCompleted,
       resetInactivityTimer,
+      cleanUp,
     ],
   );
 
-  // Get the appropriate shape style based on current theme
+  // Get the appropriate shape style based on current shape
   const getShapeStyle = useCallback(() => {
-    return SHAPE_STYLES[currentTheme] || SHAPE_STYLES.circle;
-  }, [currentTheme]);
+    return SHAPE_STYLES[currentShape] || SHAPE_STYLES[SHAPES.CIRCLE];
+  }, [currentShape]);
+
+  // Get the shape name for display
+  const getShapeName = useCallback(() => {
+    switch (currentShape) {
+      case SHAPES.CIRCLE:
+        return "Circle";
+      case SHAPES.SQUARE:
+        return "Square";
+      case SHAPES.ROUNDED_SQUARE:
+        return "Rounded Square";
+      case SHAPES.PILL:
+        return "Pill";
+      default:
+        return "Circle";
+    }
+  }, [currentShape]);
 
   return (
     <AnimatedBackground colors={COLORS.freePop.background}>
@@ -234,7 +318,7 @@ export default function FreePop() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
-          {/* Current theme display */}
+          {/* Current shape display */}
           <LinearGradient
             colors={SHAPE_THEMES[currentTheme].colors}
             style={styles.themeContainer}
@@ -242,8 +326,7 @@ export default function FreePop() {
             end={{ x: 1, y: 1 }}
           >
             <Text style={styles.themeName}>
-              {SHAPE_THEMES[currentTheme].icon}{" "}
-              {SHAPE_THEMES[currentTheme].name}
+              {SHAPE_THEMES[currentTheme].icon} {getShapeName()}
             </Text>
 
             {/* Progress indicator */}
@@ -254,21 +337,15 @@ export default function FreePop() {
 
           {/* Bubble grid */}
           <View style={styles.gridContainer}>
-            <View
-              style={[
-                styles.grid,
-                { width: GRID_SIZE * 90 }, // Adjust based on bubble size + margin
-              ]}
-            >
+            <View style={[styles.grid, { width: GRID_SIZE * 90 }]}>
               {Array.from({ length: TOTAL_BUBBLES }).map((_, index) => (
                 <PopBubble
-                  key={`${currentTheme}-${index}`}
+                  key={`${currentShape}-${index}`}
                   id={`${index}`}
                   isPopped={bubbleStates[index]}
                   onPop={() => handlePop(index)}
                   colors={SHAPE_THEMES[currentTheme].colors}
                   size={70}
-                  // Pass custom shape style based on current theme
                   shapeStyle={getShapeStyle()}
                 />
               ))}

@@ -3,7 +3,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import {
-  Brain,
+  // Brain,
   Palette,
   WholeWord,
   Calculator,
@@ -19,39 +19,39 @@ import { useGameContext } from "../contexts/GameContext";
 
 // Game modes with their details
 const GAME_MODES = [
-  {
-    title: "Free Pop",
-    icon: Brain,
-    color: "#FF6B95",
-    route: "/free-pop",
-    animal: "bunny" as const,
-  },
+  // {
+  //   title: "Free Pop",
+  //   icon: Brain,
+  //   color: "#FF6B95",
+  //   route: "/free-pop" as const,
+  //   animal: "bunny" as const,
+  // },
   {
     title: "Colors",
     icon: Palette,
     color: "#4BD5B3",
-    route: "/colors",
+    route: "/colors" as const,
     animal: "elephant" as const,
   },
   {
     title: "ABC & 123",
     icon: WholeWord,
     color: "#5B9AE6",
-    route: "/abc",
+    route: "/abc" as const,
     animal: "giraffe" as const,
   },
   {
     title: "Math Fun",
     icon: Calculator,
     color: "#9D7FE6",
-    route: "/math",
+    route: "/math" as const,
     animal: "cat" as const,
   },
   {
     title: "Speed Pop",
     icon: Zap,
     color: "#FF9858",
-    route: "/speed",
+    route: "/speed" as const,
     animal: "lion" as const,
   },
 ];
@@ -59,14 +59,14 @@ const GAME_MODES = [
 export default function MainMenu() {
   const router = useRouter();
   const [sound, setSound] = React.useState<Audio.Sound | null>(null);
-  const { totalPops, shapesCompleted } = useGameContext();
+  const { totalPops } = useGameContext();
 
   // Load button press sound
   useEffect(() => {
     const loadSound = async () => {
       try {
         const { sound } = await Audio.Sound.createAsync(
-          require("../assets/sounds/button-press.mp3"),
+          require("../assets/sounds/click.wav"),
         );
         setSound(sound);
       } catch (error) {
@@ -81,7 +81,9 @@ export default function MainMenu() {
     };
   }, []);
 
-  const handleGameSelect = (route: string) => {
+  const handleGameSelect = (
+    route: "/free-pop" | "/colors" | "/abc" | "/math" | "/speed",
+  ) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     sound?.replayAsync();
     router.push(route);
@@ -176,10 +178,10 @@ export default function MainMenu() {
               <Text style={styles.statValue}>{totalPops}</Text>
               <Text style={styles.statLabel}>Total Pops</Text>
             </View>
-            <View style={styles.statItem}>
+            {/* <View style={styles.statItem}>
               <Text style={styles.statValue}>{shapesCompleted}</Text>
               <Text style={styles.statLabel}>Shapes Done</Text>
-            </View>
+            </View> */}
           </View>
         </LinearGradient>
       </Animated.View>

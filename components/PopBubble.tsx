@@ -24,7 +24,7 @@ type PopBubbleProps = {
   poppedContent?: React.ReactNode;
   disabled?: boolean;
   sound?: Audio.Sound;
-  shapeStyle?: ViewStyle; // Add this prop for custom shape styling
+  shapeStyle?: ViewStyle;
 };
 
 const PopBubble = ({
@@ -38,7 +38,7 @@ const PopBubble = ({
   poppedContent,
   disabled = false,
   sound,
-  shapeStyle, // New prop for shape customization
+  shapeStyle,
 }: PopBubbleProps) => {
   const { incrementPops } = useGameContext();
 
@@ -117,7 +117,19 @@ const PopBubble = ({
 
   // Apply shape style if provided, otherwise use default circular style
   const defaultBorderRadius = size / 2;
-  const shapeBorderRadius = shapeStyle?.borderRadius ?? defaultBorderRadius;
+
+  // Extract border radius from shape style or use default
+  const shapeBorderRadius =
+    shapeStyle && "borderRadius" in shapeStyle
+      ? shapeStyle.borderRadius
+      : defaultBorderRadius;
+
+  // Extract width and height from shape style or use default
+  const shapeWidth =
+    shapeStyle && "width" in shapeStyle ? shapeStyle.width : size;
+
+  const shapeHeight =
+    shapeStyle && "height" in shapeStyle ? shapeStyle.height : size;
 
   const bubbleStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -127,7 +139,7 @@ const PopBubble = ({
   }));
 
   const innerBubbleStyle = useAnimatedStyle(() => ({
-    borderRadius: shapeBorderRadius, // Use the shape's border radius
+    borderRadius: shapeBorderRadius,
     // Create a more pronounced concave/convex effect
     transform: [
       { perspective: 500 },
@@ -143,8 +155,11 @@ const PopBubble = ({
         style={[
           styles.container,
           bubbleStyle,
-          { width: size, height: size, borderRadius: shapeBorderRadius }, // Apply shape border radius
-          shapeStyle, // Apply any additional shape styling
+          {
+            width: shapeWidth,
+            height: shapeHeight,
+            borderRadius: shapeBorderRadius,
+          },
         ]}
       >
         <View style={styles.bubbleWrapper}>
@@ -152,8 +167,11 @@ const PopBubble = ({
             colors={isPopped ? poppedColors : colors}
             style={[
               styles.bubble,
-              { borderRadius: shapeBorderRadius }, // Apply shape border radius
-              shapeStyle, // Apply any additional shape styling
+              {
+                width: "100%",
+                height: "100%",
+                borderRadius: shapeBorderRadius,
+              },
             ]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -170,9 +188,9 @@ const PopBubble = ({
                 styles.poppedIndicator,
                 {
                   borderRadius:
-                    (typeof shapeBorderRadius === "number"
-                      ? shapeBorderRadius
-                      : defaultBorderRadius) / 2,
+                    typeof shapeBorderRadius === "number"
+                      ? shapeBorderRadius / 2
+                      : defaultBorderRadius / 2,
                 },
               ]}
             />
@@ -197,8 +215,6 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   bubble: {
-    width: "100%",
-    height: "100%",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,

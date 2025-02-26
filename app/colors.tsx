@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import * as Speech from "expo-speech"; // Import Speech module
+import * as Speech from "expo-speech";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import Animated, {
@@ -35,171 +35,165 @@ export default function ColorsGame() {
   const [timeRemaining, setTimeRemaining] = useState(GAME_DURATION);
   const [showResults, setShowResults] = useState(false);
 
+  // Cumulative totals (across rounds)
+  const [totalTimePlayed, setTotalTimePlayed] = useState(0);
+  const [totalColorsSolved, setTotalColorsSolved] = useState(0);
+
+  // Toggle to collapse/expand the metrics display
+  const [metricsExpanded, setMetricsExpanded] = useState(true);
+
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const progressWidth = useSharedValue(100);
 
+  // Helper function to format time (MM:SS)
+  const formatTime = useCallback((time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = time % 60;
+    return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+  }, []);
+
   // Function to speak text using TTS
   const speakText = useCallback((text: string) => {
-    // Stop any ongoing speech
     Speech.stop();
-
-    // Speak the new text
     Speech.speak(text, {
       language: "en-US",
-      pitch: 1.2, // Slightly higher pitch for child-friendly voice
-      rate: 0.9, // Slightly slower rate for clarity
+      pitch: 1.2,
+      rate: 0.9,
     });
   }, []);
 
-  // Initialize game
+  // Initialize a game round (do not reset score or cumulative totals)
   const initializeGame = useCallback(() => {
-    // Reset state
-    setScore(0);
+    // Reset only round-specific state
     setTimeRemaining(GAME_DURATION);
     setShowResults(false);
     progressWidth.value = 100;
 
-    // Choose random target color
+    // Choose a random target color
     const randomIndex = Math.floor(Math.random() * LEARNING_COLORS.length);
     const target = LEARNING_COLORS[randomIndex];
     setTargetColor(target);
 
-    // Generate bubbles with multiple colors
+    // Generate bubbles using the target color and other colors
     const colors = [];
     const targetColorCount = 8; // Number of target color bubbles
 
-    // Add target color bubbles
     for (let i = 0; i < targetColorCount; i++) {
       colors.push(target);
     }
 
-    // Fill remaining spots with other colors
     const remainingSpots = TOTAL_BUBBLES - targetColorCount;
     const otherColors = LEARNING_COLORS.filter((c) => c.name !== target.name);
-
     for (let i = 0; i < remainingSpots; i++) {
       const randomOtherIndex = Math.floor(Math.random() * otherColors.length);
       colors.push(otherColors[randomOtherIndex]);
     }
 
-    // Shuffle colors
     const shuffled = colors.sort(() => Math.random() - 0.5);
     setBubbleColors(shuffled);
     setRemainingBubbles(targetColorCount);
 
-    // Start game
+    // Start the round
     setGameActive(true);
-
-    // Announce the new target color
     speakText(`Find the color ${target.name}. You have 30 seconds.`);
-
-    // Start timer
     startTimer();
-  }, [speakText]);
+  }, [speakText, progressWidth]);
 
-  // Start the countdown timer
+  // Countdown timer for current round
   const startTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
     }
-
     timerRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
-        // Announce time running out
         if (prev === 10) {
           speakText("10 seconds left!");
         } else if (prev === 5) {
           speakText("Hurry! 5 seconds left!");
         }
-
         if (prev <= 1) {
           clearInterval(timerRef.current!);
           setGameActive(false);
           setShowResults(true);
-
-          // Announce game over
           speakText(`Time's up! Your score is ${score} points.`);
-
           return 0;
         }
         return prev - 1;
       });
-
+      // Update progress bar width
       progressWidth.value = withTiming(
-        (timeRemaining - 1) * (100 / GAME_DURATION),
+        ((timeRemaining - 1) * 100) / GAME_DURATION,
       );
     }, 1000);
-  }, [timeRemaining, score, speakText]);
+  }, [timeRemaining, score, speakText, progressWidth]);
 
-  // Clean up timer on unmount
+  // Update total time played while a round is active
+  useEffect(() => {
+    let totalTimeInterval: NodeJS.Timeout;
+    if (gameActive) {
+      totalTimeInterval = setInterval(() => {
+        setTotalTimePlayed((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => {
+      if (totalTimeInterval) clearInterval(totalTimeInterval);
+    };
+  }, [gameActive]);
+
+  // Initial setup: load sounds and initialize speech
   useEffect(() => {
     loadSound("pop");
     loadSound("correct");
     loadSound("incorrect");
     loadSound("celebration");
 
-    // Initialize Speech module
     Speech.getAvailableVoicesAsync().then(() => {
       console.log("Speech module initialized");
     });
-
+    // Start game round on mount
+    initializeGame();
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-
-      // Clean up speech when component unmounts
       Speech.stop();
     };
-  }, []);
+  }, [initializeGame]);
 
-  // Handle bubble pop
+  // Handle bubble pop events
   const handlePop = useCallback(
     (index: number, color: (typeof LEARNING_COLORS)[0]) => {
       if (!gameActive) return;
-
-      // Play haptic feedback
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Check if correct color
       if (color.name === targetColor.name) {
-        // Correct color!
         playSound("correct");
         setScore((prev) => prev + 10);
         setRemainingBubbles((prev) => prev - 1);
         incrementPops();
 
-        // Check if all target bubbles popped
         if (remainingBubbles <= 1) {
-          // Level completed!
           playSound("celebration");
           incrementColorsLearned();
-
-          // Announce success
+          setTotalColorsSolved((prev) => prev + 1);
           speakText(
             `Great job! You found all the ${targetColor.name} bubbles!`,
           );
-
-          // Reset the game after a short delay
           setTimeout(() => {
             initializeGame();
           }, 1500);
         } else if (remainingBubbles <= 3) {
-          // Announce when few bubbles remain
           speakText(
             `Good! ${remainingBubbles - 1} ${targetColor.name} bubbles left.`,
           );
         }
       } else {
-        // Wrong color
         playSound("incorrect");
         setScore((prev) => Math.max(0, prev - 5));
-
-        // Announce wrong color
         speakText(`That's ${color.name}, not ${targetColor.name}.`);
       }
 
-      // Remove popped bubble
+      // Mark the bubble as popped
       setBubbleColors((prev) => {
         const newColors = [...prev];
         newColors[index] = { ...newColors[index], popped: true };
@@ -217,12 +211,12 @@ export default function ColorsGame() {
     ],
   );
 
-  // Start game on first render
+  // Start round on mount
   useEffect(() => {
     initializeGame();
   }, [initializeGame]);
 
-  // Timer progress bar animated style
+  // Animated style for timer progress bar
   const progressStyle = useAnimatedStyle(() => {
     return {
       width: `${progressWidth.value}%`,
@@ -237,7 +231,7 @@ export default function ColorsGame() {
         colors={targetColor.value}
       />
 
-      {/* Animal decorations */}
+      {/* Animal decoration */}
       <FloatingAnimal
         type="elephant"
         position={{ top: 100, left: 20 }}
@@ -246,7 +240,7 @@ export default function ColorsGame() {
       />
 
       <View style={styles.container}>
-        {/* Target color and timer */}
+        {/* Target color info & round timer */}
         <LinearGradient
           colors={targetColor.value}
           style={styles.targetContainer}
@@ -257,7 +251,6 @@ export default function ColorsGame() {
             <Text style={styles.findText}>Find</Text>
             <Text style={styles.targetText}>{targetColor.name}</Text>
           </View>
-
           <View style={styles.remainingContainer}>
             <Text style={styles.remainingText}>{remainingBubbles} left</Text>
           </View>
@@ -286,23 +279,45 @@ export default function ColorsGame() {
           </View>
         </View>
 
-        {/* Score display */}
-        <View style={styles.scoreContainer}>
-          <LinearGradient
-            colors={["rgba(255, 255, 255, 0.8)", "rgba(255, 255, 255, 0.5)"]}
-            style={styles.scoreCard}
-          >
-            <Text style={styles.scoreTitle}>Score</Text>
-            <Text style={styles.scoreText}>{score}</Text>
-          </LinearGradient>
-        </View>
+        {/* Collapsible metrics display */}
+        <Pressable
+          onPress={() => setMetricsExpanded((prev) => !prev)}
+          style={styles.metricsToggle}
+        >
+          <Text style={styles.metricsToggleText}>
+            {metricsExpanded ? "Hide Metrics ▲" : "Show Metrics ▼"}
+          </Text>
+        </Pressable>
+        {metricsExpanded && (
+          <View style={styles.metricsContainer}>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricTitle}>Score</Text>
+              <Text style={styles.metricValue}>{score}</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricTitle}>Time Played</Text>
+              <Text style={styles.metricValue}>
+                {formatTime(totalTimePlayed)}
+              </Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricTitle}>Colors Solved</Text>
+              <Text style={styles.metricValue}>{totalColorsSolved}</Text>
+            </View>
+          </View>
+        )}
 
         {/* Results overlay */}
         {showResults && (
           <Animated.View entering={FadeIn} style={styles.resultsOverlay}>
             <Text style={styles.resultsTitle}>Time's Up!</Text>
             <Text style={styles.resultsScore}>Score: {score}</Text>
-
+            <Text style={styles.resultsScore}>
+              Colors Solved: {totalColorsSolved}
+            </Text>
+            <Text style={styles.resultsScore}>
+              Time Played: {formatTime(totalTimePlayed)}
+            </Text>
             <Pressable
               style={styles.playAgainButton}
               onPress={() => {
@@ -409,24 +424,36 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "center",
   },
-  scoreContainer: {
-    width: "90%",
-    maxWidth: 500,
-    marginVertical: 20,
+  metricsToggle: {
+    marginVertical: 10,
   },
-  scoreCard: {
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-  },
-  scoreTitle: {
+  metricsToggleText: {
     fontFamily: "ComicNeue",
-    fontSize: 18,
+    fontSize: 16,
+    color: COLORS.text.primary,
+    textDecorationLine: "underline",
+  },
+  metricsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  metricItem: {
+    flex: 1,
+    minWidth: 100,
+    alignItems: "center",
+    marginHorizontal: 5,
+    marginVertical: 5,
+  },
+  metricTitle: {
+    fontFamily: "ComicNeue",
+    fontSize: 16,
     color: COLORS.text.primary,
   },
-  scoreText: {
+  metricValue: {
     fontFamily: "BubbleGum",
-    fontSize: 36,
+    fontSize: 24,
     color: COLORS.colors.primary,
   },
   resultsOverlay: {
@@ -446,7 +473,7 @@ const styles = StyleSheet.create({
     fontFamily: "ComicNeue",
     fontSize: 32,
     color: COLORS.text.primary,
-    marginBottom: 40,
+    marginBottom: 10,
   },
   playAgainButton: {
     borderRadius: 25,

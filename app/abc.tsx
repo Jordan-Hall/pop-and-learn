@@ -17,11 +17,9 @@ import { loadSound, playSound } from "../utils/sounds";
 const GRID_SIZE = 4; // 4x4 grid
 const TOTAL_BUBBLES = GRID_SIZE * GRID_SIZE;
 
-// Alphabet and number ranges
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
 const NUMBERS = Array.from({ length: 10 }, (_, i) => `${i + 1}`);
 
-// Game modes
 enum GameMode {
   ALPHABET = "alphabet",
   NUMBERS = "numbers",
@@ -36,40 +34,55 @@ export default function AbcGame() {
   const [popStates, setPopStates] = useState<boolean[]>([]);
   const [showCelebration, setShowCelebration] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  // State to track total time played (in seconds)
+  const [totalTimePlayed, setTotalTimePlayed] = useState(0);
+  // State for collapsing/expanding the metrics display
+  const [metricsExpanded, setMetricsExpanded] = useState(true);
+
+  // Helper function to format seconds as MM:SS
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = time % 60;
+    return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+  };
+
+  // Increase total time played every second after component mounts.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTotalTimePlayed((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Function to speak text using TTS
   const speakText = useCallback((text: string) => {
-    // Stop any ongoing speech
     Speech.stop();
-
-    // Speak the new text
     Speech.speak(text, {
       language: "en-US",
-      pitch: 1.2, // Slightly higher pitch for child-friendly voice
-      rate: 0.9, // Slightly slower rate for clarity
+      pitch: 1.2,
+      rate: 0.9,
     });
   }, []);
 
-  // Initialize the game
+  // Initialize the game round
   const initializeGame = useCallback(
     (newMode?: GameMode) => {
       const gameMode = newMode || mode;
       const items = gameMode === GameMode.ALPHABET ? ALPHABET : NUMBERS;
 
-      // Reset state
+      // Reset state for the current round
       setPopStates(Array(TOTAL_BUBBLES).fill(false));
       setShowCelebration(false);
 
-      // Set target based on current index
+      // Set target based on the current index
       const targetIndex = currentIndex % items.length;
       const target = items[targetIndex];
       setCurrentTarget(target);
 
-      // Generate bubble contents with multiple instances of the target
-      const contents = [];
+      // Generate bubble contents with several instances of the target
+      const contents: string[] = [];
       const targetCount = 5; // Number of target bubbles
 
-      // Add target bubbles
       for (let i = 0; i < targetCount; i++) {
         contents.push(target);
       }
@@ -77,23 +90,20 @@ export default function AbcGame() {
       // Fill remaining spots with other letters/numbers
       const remainingSpots = TOTAL_BUBBLES - targetCount;
       const otherItems = items.filter((item) => item !== target);
-
       for (let i = 0; i < remainingSpots; i++) {
         const randomIndex = Math.floor(Math.random() * otherItems.length);
         contents.push(otherItems[randomIndex]);
       }
 
-      // Shuffle contents
+      // Shuffle the contents
       const shuffled = contents.sort(() => Math.random() - 0.5);
       setBubbleContents(shuffled);
 
-      // Announce the new target with TTS
+      // Announce the new target using TTS
       const isFirstTarget = currentIndex === 0 && !newMode;
       if (isFirstTarget) {
-        // First time starting the game
         speakText(`Game started! Find the letter ${target}`);
       } else {
-        // For subsequent targets
         const typeText = gameMode === GameMode.ALPHABET ? "letter" : "number";
         speakText(`Quick! Find the ${typeText} ${target}`);
       }
@@ -101,63 +111,54 @@ export default function AbcGame() {
     [mode, currentIndex, speakText],
   );
 
-  // Initialize on first render
+  // Initial setup: load sounds and initialize speech
   useEffect(() => {
     loadSound("pop");
     loadSound("correct");
     loadSound("incorrect");
     loadSound("celebration");
 
-    // Initialize Speech module
     Speech.getAvailableVoicesAsync().then(() => {
       console.log("Speech module initialized");
     });
 
     initializeGame();
-
-    // Clean up speech when component unmounts
     return () => {
       Speech.stop();
     };
   }, [initializeGame]);
 
-  // Switch mode
+  // Switch game mode
   const switchMode = useCallback(() => {
     const newMode =
       mode === GameMode.ALPHABET ? GameMode.NUMBERS : GameMode.ALPHABET;
     setMode(newMode);
     setCurrentIndex(0);
-
-    // Announce mode change
     speakText(
       `Switching to ${newMode === GameMode.ALPHABET ? "alphabet" : "numbers"} mode`,
     );
-
     initializeGame(newMode);
   }, [mode, initializeGame, speakText]);
 
-  // Handle bubble pop
+  // Handle bubble pop event
   const handlePop = useCallback(
     (index: number, content: string) => {
       if (popStates[index]) return;
 
-      // Play haptic feedback
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Update pop state
+      // Mark the bubble as popped
       setPopStates((prev) => {
         const newStates = [...prev];
         newStates[index] = true;
         return newStates;
       });
 
-      // Check if correct content
+      // Check if the popped bubble is the target letter/number
       if (content === currentTarget) {
-        // Correct!
         playSound("correct");
         incrementPops();
 
-        // Check if all targets are found
         const newPopStates = [...popStates];
         newPopStates[index] = true;
 
@@ -166,33 +167,24 @@ export default function AbcGame() {
         );
 
         if (remainingTargets.length === 0) {
-          // All targets found, advance to next letter/number
           playSound("celebration");
           setShowCelebration(true);
           incrementLettersLearned();
           setCompletedCount((prev) => prev + 1);
-
-          // Announce success with TTS
           speakText(`Great job! You found all the ${currentTarget}s!`);
 
-          // Move to next letter/number after celebration
           setTimeout(() => {
             setCurrentIndex((prev) => prev + 1);
             initializeGame();
           }, 2000);
         } else {
-          // Found a correct bubble but more remain
           const remaining = remainingTargets.length;
           if (remaining <= 3) {
-            // Only announce remaining count for 3 or fewer remaining
             speakText(`Good! Find ${remaining} more`);
           }
         }
       } else {
-        // Incorrect
         playSound("incorrect");
-
-        // Optional: Provide TTS feedback for incorrect selection
         speakText(`That's ${content}, not ${currentTarget}. Try again!`);
       }
     },
@@ -209,6 +201,7 @@ export default function AbcGame() {
 
   return (
     <AnimatedBackground colors={[COLORS.abc.primary, COLORS.abc.secondary]}>
+      {/* Wrap the header in a View to push it down */}
       <GameHeader
         title="ABC & 123"
         subtitle={
@@ -219,7 +212,6 @@ export default function AbcGame() {
         colors={[COLORS.abc.primary, COLORS.abc.secondary]}
       />
 
-      {/* Animal decoration */}
       <FloatingAnimal
         type="giraffe"
         position={{ top: 100, right: 20 }}
@@ -228,7 +220,7 @@ export default function AbcGame() {
       />
 
       <View style={styles.container}>
-        {/* Target display */}
+        {/* Target display and mode toggle */}
         <LinearGradient
           colors={[COLORS.abc.primary, COLORS.abc.secondary]}
           style={styles.targetContainer}
@@ -237,8 +229,6 @@ export default function AbcGame() {
             <Text style={styles.findText}>Find</Text>
             <Text style={styles.targetText}>{currentTarget}</Text>
           </View>
-
-          {/* Mode switch button */}
           <Pressable onPress={switchMode} style={styles.modeButton}>
             <Text style={styles.modeButtonText}>
               {mode === GameMode.ALPHABET ? "123" : "ABC"}
@@ -263,18 +253,31 @@ export default function AbcGame() {
           </View>
         </View>
 
-        {/* Progress display */}
-        <View style={styles.progressContainer}>
-          <LinearGradient
-            colors={["rgba(255, 255, 255, 0.8)", "rgba(255, 255, 255, 0.5)"]}
-            style={styles.progressCard}
-          >
-            <Text style={styles.progressTitle}>
-              {mode === GameMode.ALPHABET ? "Letters" : "Numbers"} Learned
-            </Text>
-            <Text style={styles.progressText}>{completedCount}</Text>
-          </LinearGradient>
-        </View>
+        {/* Collapsible metrics display */}
+        <Pressable
+          onPress={() => setMetricsExpanded((prev) => !prev)}
+          style={styles.metricsToggle}
+        >
+          <Text style={styles.metricsToggleText}>
+            {metricsExpanded ? "Hide Metrics ▲" : "Show Metrics ▼"}
+          </Text>
+        </Pressable>
+        {metricsExpanded && (
+          <View style={styles.metricsContainer}>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricTitle}>
+                {mode === GameMode.ALPHABET ? "Letters" : "Numbers"} Learned
+              </Text>
+              <Text style={styles.metricValue}>{completedCount}</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricTitle}>Time Played</Text>
+              <Text style={styles.metricValue}>
+                {formatTime(totalTimePlayed)}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Celebration overlay */}
         {showCelebration && (
@@ -356,24 +359,36 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  progressContainer: {
-    width: "90%",
-    maxWidth: 500,
-    marginVertical: 20,
+  metricsToggle: {
+    marginVertical: 10,
   },
-  progressCard: {
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-  },
-  progressTitle: {
+  metricsToggleText: {
     fontFamily: "ComicNeue",
-    fontSize: 18,
+    fontSize: 16,
+    color: COLORS.text.primary,
+    textDecorationLine: "underline",
+  },
+  metricsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  metricItem: {
+    flex: 1,
+    minWidth: 150,
+    alignItems: "center",
+    marginHorizontal: 10,
+    marginVertical: 5,
+  },
+  metricTitle: {
+    fontFamily: "ComicNeue",
+    fontSize: 16,
     color: COLORS.text.primary,
   },
-  progressText: {
+  metricValue: {
     fontFamily: "BubbleGum",
-    fontSize: 36,
+    fontSize: 24,
     color: COLORS.abc.primary,
   },
   celebrationOverlay: {

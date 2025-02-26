@@ -3,7 +3,6 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as Speech from "expo-speech";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
-import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 
 import AnimatedBackground from "../components/AnimatedBackground";
 import FloatingAnimal from "../components/FloatingAnimal";
@@ -13,8 +12,8 @@ import { useGameContext } from "../contexts/GameContext";
 import { COLORS } from "../utils/colors";
 import { loadSound, playSound } from "../utils/sounds";
 
-// Grid configuration
-const GRID_SIZE = 3; // 3x3 grid
+// Grid configuration: 4x4 grid
+const GRID_SIZE = 4;
 const TOTAL_BUBBLES = GRID_SIZE * GRID_SIZE;
 
 // Difficulty levels
@@ -38,7 +37,7 @@ type MathProblem = {
 
 export default function MathGame() {
   const { incrementPops, incrementMathProblems } = useGameContext();
-  const [difficulty, setDifficulty] = useState<Difficulty>(Difficulty.EASY);
+  const [difficulty, setDifficulty] = useState(Difficulty.EASY);
   const [currentProblem, setCurrentProblem] = useState<MathProblem | null>(
     null,
   );
@@ -46,24 +45,40 @@ export default function MathGame() {
   const [score, setScore] = useState(0);
   const [showResult, setShowResult] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
+  // --- Elapsed time state ---
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const startTime = useRef(Date.now());
+  useEffect(() => {
+    const timerInterval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime.current) / 1000));
+    }, 1000);
+    return () => clearInterval(timerInterval);
+  }, []);
+  // --- End elapsed time state ---
+
+  // Collapsible metrics display state
+  const [metricsExpanded, setMetricsExpanded] = useState(true);
+
+  // --- NEW: Pop state array for the bubbles ---
+  const [popStates, setPopStates] = useState<boolean[]>(
+    new Array(TOTAL_BUBBLES).fill(false),
+  );
+
+  // Refs for timers and speech
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const nextProblemTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isSpeakingRef = useRef<boolean>(false);
 
-  // Function to speak the math problem
+  // Function to speak the math problem.
   const speakMathProblem = useCallback(
     async (problem: MathProblem, isGameStart = false) => {
-      // Check if we're already speaking
       if (isSpeakingRef.current) {
         await Speech.stop();
       }
-
       const symbol = problem.type === ProblemType.ADDITION ? "plus" : "minus";
       const prefix = isGameStart ? "Game started. Target " : "Quick now. Pop ";
       const speech = `${prefix}${problem.num1} ${symbol} ${problem.num2}`;
-
       isSpeakingRef.current = true;
-
       Speech.speak(speech, {
         rate: 0.9,
         pitch: 1.0,
@@ -78,25 +93,17 @@ export default function MathGame() {
     [],
   );
 
-  // Function to speak the answer
+  // Function to speak the answer.
   const speakAnswer = useCallback(
     async (problem: MathProblem, wasCorrect = false) => {
-      // Stop any ongoing speech
       if (isSpeakingRef.current) {
         await Speech.stop();
       }
-
       const symbol = problem.type === ProblemType.ADDITION ? "plus" : "minus";
-      let speech;
-
-      if (wasCorrect) {
-        speech = `That's correct! The answer was ${problem.answer}.`;
-      } else {
-        speech = `The answer is ${problem.answer}. ${problem.num1} ${symbol} ${problem.num2} equals ${problem.answer}`;
-      }
-
+      const speech = wasCorrect
+        ? `That's correct! The answer was ${problem.answer}.`
+        : `The answer is ${problem.num1} ${symbol} ${problem.num2} equals ${problem.answer}`;
       isSpeakingRef.current = true;
-
       Speech.speak(speech, {
         rate: 0.9,
         pitch: 1.0,
@@ -111,195 +118,170 @@ export default function MathGame() {
     [],
   );
 
-  // Generate a new math problem
+  // Generate a new math problem.
   const generateProblem = useCallback(() => {
     const maxNum = difficulty === Difficulty.EASY ? 5 : 10;
     const problemType =
       Math.random() > 0.5 ? ProblemType.ADDITION : ProblemType.SUBTRACTION;
-
     let num1: number, num2: number, answer: number;
-
     if (problemType === ProblemType.ADDITION) {
-      // Addition problem
       num1 = Math.floor(Math.random() * maxNum) + 1;
       num2 = Math.floor(Math.random() * maxNum) + 1;
       answer = num1 + num2;
     } else {
-      // Subtraction problem: ensure num1 > num2 for positive answer
       num1 = Math.floor(Math.random() * maxNum) + 1;
       num2 = Math.floor(Math.random() * num1) + 1;
       answer = num1 - num2;
     }
-
-    const problem: MathProblem = {
-      num1,
-      num2,
-      type: problemType,
-      answer,
-    };
-
+    const problem: MathProblem = { num1, num2, type: problemType, answer };
     setCurrentProblem(problem);
     return problem;
   }, [difficulty]);
 
-  // Generate bubble answers (correct + distractors)
+  // Generate bubble answers: correct answer plus distractors.
   const generateBubbleAnswers = useCallback(
     (problem: MathProblem) => {
       const answers = [problem.answer];
       const maxNum = difficulty === Difficulty.EASY ? 10 : 20;
-
-      // Generate unique distractor answers
+      // Generate unique distractor answers.
       while (answers.length < TOTAL_BUBBLES) {
         const distractor = Math.floor(Math.random() * maxNum) + 1;
         if (!answers.includes(distractor)) {
           answers.push(distractor);
         }
       }
-
-      // Shuffle answers
       const shuffled = answers.sort(() => Math.random() - 0.5);
       setBubbleAnswers(shuffled);
     },
     [difficulty],
   );
 
-  // Clean up timers and speech
+  // Clean up timers and speech.
   const cleanUp = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-
     if (nextProblemTimerRef.current) {
       clearTimeout(nextProblemTimerRef.current);
       nextProblemTimerRef.current = null;
     }
-
     Speech.stop();
     isSpeakingRef.current = false;
   }, []);
 
-  // Initialize the game
+  // Initialize the game: generate problem, answers, reset popStates.
   const initializeGame = useCallback(() => {
-    // Clean up any existing timers and speech
     cleanUp();
-
-    // Generate a new problem and answers
+    // Reset popStates for the new problem.
+    setPopStates(new Array(TOTAL_BUBBLES).fill(false));
     const problem = generateProblem();
     generateBubbleAnswers(problem);
     setShowResult(false);
-
-    // Speak the problem with "game started" for first problem, otherwise "quick now"
     const isFirstProblem = score === 0;
-
-    // Small delay before speaking to avoid overlap
     setTimeout(() => {
       speakMathProblem(problem, isFirstProblem);
     }, 300);
-
-    // Set timer to speak the answer after 20 seconds if not answered
+    // After 20 seconds, speak the answer if no correct selection is made.
     timerRef.current = setTimeout(() => {
       if (!showResult) {
         speakAnswer(problem);
       }
     }, 20000);
   }, [
+    cleanUp,
     generateProblem,
     generateBubbleAnswers,
-    speakMathProblem,
-    speakAnswer,
     score,
     showResult,
-    cleanUp,
+    speakMathProblem,
+    speakAnswer,
   ]);
 
-  // Initialize on first render
+  // Initial mount: load sounds and initialize game.
   useEffect(() => {
     loadSound("pop");
     loadSound("correct");
     loadSound("incorrect");
-
     initializeGame();
-
-    // Cleanup function to stop speech and clear timers when component unmounts
     return () => {
       cleanUp();
     };
   }, [initializeGame, cleanUp]);
 
-  // Handle bubble pop
+  // Handle answer selection.
+  // For a wrong answer, we briefly mark a bubble as pressed and then reset that
+  // bubble's state. For the correct answer, we show a result overlay, reset all bubbles,
+  // and load a new problem.
   const handleAnswerSelect = useCallback(
-    (answer: number) => {
+    (index: number, answer: number) => {
       if (!currentProblem || showResult) return;
+      // If this bubble is already pressed, do nothing.
+      if (popStates[index]) return;
 
-      // Clean up timers and speech
-      cleanUp();
-
-      // Play haptic feedback
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Check if answer is correct
-      const correct = answer === currentProblem.answer;
-      setIsCorrect(correct);
+      // Mark the tapped bubble as pressed.
+      setPopStates((prev) => {
+        const newStates = [...prev];
+        newStates[index] = true;
+        return newStates;
+      });
 
-      if (correct) {
-        // Correct answer
+      if (answer === currentProblem.answer) {
         playSound("correct");
         setScore((prev) => prev + 10);
         incrementMathProblems();
-
-        // Speak confirmation for correct answer
         setTimeout(() => {
           speakAnswer(currentProblem, true);
         }, 500);
+        setIsCorrect(true);
+        setShowResult(true);
+        nextProblemTimerRef.current = setTimeout(() => {
+          // Reset all bubbles state before starting the next round.
+          setPopStates(new Array(TOTAL_BUBBLES).fill(false));
+          initializeGame();
+        }, 3000);
       } else {
-        // Incorrect answer
         playSound("incorrect");
         setScore((prev) => Math.max(0, prev - 5));
-
-        // Speak the correct answer when user gets it wrong
+        speakAnswer(currentProblem, false);
+        // For a wrong answer, reset only the pressed bubble after a short delay.
         setTimeout(() => {
-          speakAnswer(currentProblem, false);
-        }, 500);
+          setPopStates((prev) => {
+            const newStates = [...prev];
+            newStates[index] = false;
+            return newStates;
+          });
+        }, 300);
       }
-
       incrementPops();
-      setShowResult(true);
-
-      // Move to next problem after delay - wait longer to allow speech to complete
-      nextProblemTimerRef.current = setTimeout(() => {
-        initializeGame();
-      }, 3000);
     },
     [
       currentProblem,
       showResult,
+      popStates,
       incrementPops,
       incrementMathProblems,
       initializeGame,
       speakAnswer,
-      cleanUp,
     ],
   );
 
-  // Toggle difficulty
+  // Toggle difficulty (reset round with new difficulty).
   const toggleDifficulty = useCallback(() => {
     const newDifficulty =
       difficulty === Difficulty.EASY ? Difficulty.HARD : Difficulty.EASY;
     setDifficulty(newDifficulty);
-
-    // Clean up before initializing new game
     cleanUp();
-
     setTimeout(() => {
       initializeGame();
     }, 100);
   }, [difficulty, initializeGame, cleanUp]);
 
-  // Format problem as text
+  // Format problem text for display.
   const getProblemText = useCallback(() => {
     if (!currentProblem) return "";
-
     const symbol = currentProblem.type === ProblemType.ADDITION ? "+" : "-";
     return `${currentProblem.num1} ${symbol} ${currentProblem.num2} = ?`;
   }, [currentProblem]);
@@ -312,7 +294,6 @@ export default function MathGame() {
         colors={[COLORS.math.primary, COLORS.math.secondary]}
       />
 
-      {/* Animal decoration */}
       <FloatingAnimal
         type="cat"
         position={{ top: 100, left: 20 }}
@@ -321,14 +302,11 @@ export default function MathGame() {
       />
 
       <View style={styles.container}>
-        {/* Problem display */}
         <LinearGradient
           colors={[COLORS.math.primary, COLORS.math.secondary]}
           style={styles.problemContainer}
         >
           <Text style={styles.problemText}>{getProblemText()}</Text>
-
-          {/* Difficulty toggle */}
           <Pressable onPress={toggleDifficulty} style={styles.difficultyButton}>
             <Text style={styles.difficultyButtonText}>
               {difficulty === Difficulty.EASY ? "Easy" : "Hard"}
@@ -336,57 +314,58 @@ export default function MathGame() {
           </Pressable>
         </LinearGradient>
 
-        {/* Answers grid */}
+        {/* Responsive Bubble Grid */}
         <View style={styles.gridContainer}>
-          <View style={[styles.grid, { width: GRID_SIZE * 90 }]}>
+          <View style={[styles.grid, { width: GRID_SIZE * 85 }]}>
             {bubbleAnswers.map((answer, index) => (
               <PopBubble
                 key={`answer-${index}`}
                 id={`${index}`}
-                isPopped={showResult && answer === currentProblem?.answer}
-                onPop={() => handleAnswerSelect(answer)}
+                isPopped={popStates[index]}
+                onPop={() => handleAnswerSelect(index, answer)}
                 colors={[COLORS.math.primary, COLORS.math.secondary]}
-                size={75}
+                size={65}
                 content={<Text style={styles.answerText}>{answer}</Text>}
               />
             ))}
           </View>
         </View>
 
-        {/* Score display */}
-        <View style={styles.scoreContainer}>
-          <LinearGradient
-            colors={["rgba(255, 255, 255, 0.8)", "rgba(255, 255, 255, 0.5)"]}
-            style={styles.scoreCard}
-          >
-            <Text style={styles.scoreTitle}>Score</Text>
-            <Text style={styles.scoreText}>{score}</Text>
-          </LinearGradient>
-        </View>
+        {/* Collapsible metrics display */}
+        <Pressable
+          onPress={() => setMetricsExpanded((prev) => !prev)}
+          style={styles.metricsToggle}
+        >
+          <Text style={styles.metricsToggleText}>
+            {metricsExpanded ? "Hide Metrics ▲" : "Show Metrics ▼"}
+          </Text>
+        </Pressable>
+        {metricsExpanded && (
+          <View style={styles.metricsContainer}>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricTitle}>Score</Text>
+              <Text style={styles.metricValue}>{score}</Text>
+            </View>
+            <View style={styles.metricItem}>
+              <Text style={styles.metricTitle}>Time</Text>
+              <Text style={styles.metricValue}>
+                {Math.floor(elapsedTime / 60)}:
+                {("0" + (elapsedTime % 60)).slice(-2)}
+              </Text>
+            </View>
+          </View>
+        )}
 
-        {/* Result overlay */}
-        {showResult && (
-          <Animated.View
-            entering={FadeIn}
-            exiting={FadeOut}
+        {/* Correct answer overlay (static, no flashing) */}
+        {showResult && isCorrect && (
+          <View
             style={[
               styles.resultOverlay,
-              {
-                backgroundColor: isCorrect
-                  ? "rgba(144, 238, 144, 0.8)"
-                  : "rgba(255, 192, 203, 0.8)",
-              },
+              { backgroundColor: "rgba(144, 238, 144, 0.8)" },
             ]}
           >
-            <Text style={styles.resultText}>
-              {isCorrect ? "Correct!" : "Try Again!"}
-            </Text>
-            {!isCorrect && currentProblem && (
-              <Text style={styles.correctAnswerText}>
-                The answer is {currentProblem.answer}
-              </Text>
-            )}
-          </Animated.View>
+            <Text style={styles.resultText}>Correct!</Text>
+          </View>
         )}
       </View>
     </AnimatedBackground>
@@ -432,8 +411,8 @@ const styles = StyleSheet.create({
   },
   gridContainer: {
     flex: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
   },
   grid: {
     flexDirection: "row",
@@ -448,24 +427,36 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
-  scoreContainer: {
-    width: "90%",
-    maxWidth: 500,
-    marginVertical: 20,
+  metricsToggle: {
+    marginVertical: 10,
   },
-  scoreCard: {
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-  },
-  scoreTitle: {
+  metricsToggleText: {
     fontFamily: "ComicNeue",
-    fontSize: 18,
+    fontSize: 16,
+    color: COLORS.text.primary,
+    textDecorationLine: "underline",
+  },
+  metricsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  metricItem: {
+    flex: 1,
+    minWidth: 150,
+    alignItems: "center",
+    marginHorizontal: 10,
+    marginVertical: 5,
+  },
+  metricTitle: {
+    fontFamily: "ComicNeue",
+    fontSize: 16,
     color: COLORS.text.primary,
   },
-  scoreText: {
+  metricValue: {
     fontFamily: "BubbleGum",
-    fontSize: 36,
+    fontSize: 24,
     color: COLORS.math.primary,
   },
   resultOverlay: {
@@ -481,14 +472,5 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0, 0, 0, 0.2)",
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 3,
-  },
-  correctAnswerText: {
-    fontFamily: "ComicNeue",
-    fontSize: 28,
-    color: "white",
-    marginTop: 20,
-    textShadowColor: "rgba(0, 0, 0, 0.2)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 1,
   },
 });
